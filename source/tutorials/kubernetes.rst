@@ -6,15 +6,6 @@ Kubernetes\*
 This tutorial describes how to install, configure, and start the `Kubernetes
 container orchestration system`_ on |CL-ATTR|.
 
-A Kubernetes cluster can be setup on |CL| using the |CL| cloud-native-setup
-scripts to automate the process or can be setup through a manual step-by-step
-process. This tutorial covers both scenarios.
-
-
-.. contents::
-   :local:
-   :depth: 1
-
 Background
 ***********
 
@@ -68,89 +59,6 @@ metal installation tutorial<bare-metal-install-desktop>`.
       sudo swupd bundle-add cloud-native-basic
 
 
-Set up Kubernetes automatically
-*******************************
-
-|CL| provides `cloud-native-setup scripts`_ to automate system setup and
-Kubernetes cluster initialization which allows you to get a cluster up and
-running quickly.
-
-.. note::
-
-   By default, the scripts will update |CL| to the latest version, set up the
-   system as a Kubernetes master-node with **canal for container networking**
-   and **crio for container runtime**, and taint the master node to allow
-   workloads to run on it. Kata is installed as an optional alternative
-   runtime. The script can be configured to use other CNI's and CRI's by
-   following the directions on the `README
-   <https://github.com/clearlinux/cloud-native-setup/blob/master/clr-k8s-examples/README.md>`_.
-   
-   See `What is a Container Network Interface (CNI)?`_ and `What is a
-   Container Runtime Interface (CRI)?`_ for more information.
-
-.. important::
-
-   If network proxy settings are required for Internet connectivity, configure
-   them now because the scripts will propagate proxy configuration based on
-   the running configuration. It is especially important to set the
-   :command:`no_proxy` variable appropriately for Kubernetes. 
-   
-   The script will also modify the :file:`/etc/environment` and
-   :file:`/etc/profile.d/proxy.sh` files, if they exist, with the proxy
-   environment variables in the running shell when the script is executed.
-   
-   See the `Setting proxy servers for Kubernetes`_ section for details.
-
-#. Run the :file:`system-setup.sh` script to configure the |CL| system
-   settings.
-
-   .. code-block:: bash
-
-      sudo /usr/share/clr-k8s-examples/setup_system.sh
-
-#. Stop docker and containerd to avoid conflicting CRIs being detected. The
-   scripts use CRIO for the CRI.
-
-   .. code-block:: bash
-
-      sudo systemctl stop docker
-      sudo systemctl stop containerd
-      
-
-#. Install git as it's a dependency of the :file:`create_stack.sh`.
-
-   .. code-block:: bash
-
-      sudo swupd bundle-add git
-
-
-#. Run the :file:`create_stack.sh` script to initialize the Kubernetes node
-   and setup a container network plugin.
-
-   .. code-block:: bash
-
-      sudo /usr/share/clr-k8s-examples/create_stack.sh minimal
-
-#. Follow the output on the screen and continue onto the section on `using
-   your cluster <Use your cluster>`_.
-
-
-Uninstalling
-============
-
-#. If you need to delete the Kubernetes cluster or want to start from scratch
-   run the :file:`reset_stack.sh` script.
-
-   .. warning::
-
-      This will stop components in the stack including Kubernetes, all CNI and
-      CRIs **and will delete** all containers and networks.
-
-   .. code-block:: bash
-
-      sudo /usr/share/clr-k8s-examples/reset_stack.sh
-
-
 Set up Kubernetes manually
 **************************
 
@@ -175,7 +83,7 @@ below are necessary to ensure those preflight checks pass successfully.
 
         sudo mkdir -p /etc/sysctl.d/
 
-        sudo tee /etc/sysctl.d/99-kubernetes-cri.conf > /dev/null <<EOF
+        sudo tee /etc/sysctl.d/60-k8s.conf > /dev/null <<EOF
         net.bridge.bridge-nf-call-iptables  = 1
         net.ipv4.ip_forward                 = 1
         net.bridge.bridge-nf-call-ip6tables = 1
@@ -192,7 +100,15 @@ below are necessary to ensure those preflight checks pass successfully.
 
    .. code-block:: bash
 
-      sudo systemctl mask $(sed -n -e 's#^/dev/\([0-9a-z]*\).*#dev-\1.swap#p' /proc/swaps) 2>/dev/null
+
+      swaps=/proc/swaps
+      match_alpha_nums= "\([0-9a-z]\)*"
+      
+      target="^/dev/$match_alpha_nums.*$"
+      result="dev-\1.swap"
+      swap_svc=$(sed -ne "s#$target#result#p" $swaps)
+      
+      sudo systemctl mask "$swap_svc"
       sudo swapoff -a
 
    .. note::
